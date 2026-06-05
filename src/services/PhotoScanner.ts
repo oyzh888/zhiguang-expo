@@ -1,5 +1,5 @@
 import * as MediaLibrary from 'expo-media-library/legacy';
-import * as FaceDetector from 'expo-face-detector';
+import FaceDetection from '@react-native-ml-kit/face-detection';
 
 const MAX_PHOTOS = 1000;
 const CANDIDATES = 60; // 只对质量 Top60 跑人脸检测
@@ -48,7 +48,7 @@ function qualityScore(a: MediaLibrary.Asset): number {
 // 人脸评分：-2 ~ +4
 // 大脸 = 宝宝近景；无脸 = 风景/食物
 function faceScore(
-  faces: FaceDetector.FaceFeature[],
+  faces: Array<{ frame: { width: number; height: number } }>,
   imgW: number,
   imgH: number
 ): number {
@@ -56,7 +56,7 @@ function faceScore(
   const imgArea = (imgW || 1) * (imgH || 1);
   let maxRatio = 0;
   for (const f of faces) {
-    const fa = (f.bounds.size.width || 0) * (f.bounds.size.height || 0);
+    const fa = (f.frame.width || 0) * (f.frame.height || 0);
     const ratio = fa / imgArea;
     if (ratio > maxRatio) maxRatio = ratio;
   }
@@ -107,12 +107,12 @@ export async function scanPhotos(
       const info = await MediaLibrary.getAssetInfoAsync(c.id);
       const uri = info.localUri || info.uri;
       if (uri) {
-        const result = await FaceDetector.detectFacesAsync(uri, {
-          mode: FaceDetector.FaceDetectorMode.fast,
-          detectLandmarks: FaceDetector.FaceDetectorLandmarks.none,
-          runClassifications: FaceDetector.FaceDetectorClassifications.none,
+        const faces = await FaceDetection.detect(uri, {
+          performanceMode: 'fast',
+          landmarkMode: 'none',
+          classificationMode: 'none',
         });
-        c._fScore = faceScore(result.faces, c.width, c.height);
+        c._fScore = faceScore(faces, c.width, c.height);
         faceDetectionWorked = true;
       }
     } catch {
