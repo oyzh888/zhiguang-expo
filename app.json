@@ -9,11 +9,14 @@
     "backgroundColor": "#0d0d1a",
     "ios": {
       "supportsTablet": false,
+      "bundleIdentifier": "com.jackshuhui.zhiguang",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "稚光需要访问您的相册，在本地识别并筛选宝宝照片。所有处理在设备上完成，照片不会上传。"
+        "NSPhotoLibraryUsageDescription": "稚光需要访问您的相册，在本地识别并筛选宝宝照片。所有处理在设备上完成，照片不会上传。",
+        "NSCameraUsageDescription": "稚光使用摄像头进行人脸识别。"
       }
     },
     "android": {
+      "package": "com.jackshuhui.zhiguang",
       "adaptiveIcon": {
         "backgroundColor": "#0d0d1a"
       },
@@ -21,7 +24,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-media-library"
+      "expo-media-library",
+      "expo-face-detector"
     ],
     "experiments": {
       "typedRoutes": true,

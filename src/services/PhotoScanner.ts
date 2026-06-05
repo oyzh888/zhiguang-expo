@@ -1,138 +1,136 @@
 import * as MediaLibrary from 'expo-media-library';
-import { PhotoScore, ScanResult } from '../types';
-import {
-  MAX_PHOTOS, DAY_RANGE, MAX_RESULTS, BURST_INTERVAL_SECONDS, MAX_PER_BURST
-} from '../constants';
+import * as FaceDetector from 'expo-face-detector';
 
-export async function scanPhotos(babyProfileId: string): Promise<ScanResult> {
-  // Fetch candidates: last DAY_RANGE days OR last MAX_PHOTOS, union
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - DAY_RANGE);
-  const cutoffTime = cutoffDate.getTime() / 1000; // unix seconds
+const MAX_PHOTOS = 1000;
+const CANDIDATES = 60; // 只对质量 Top60 跑人脸检测
+const TOP_N = 20;
 
-  // Fetch up to MAX_PHOTOS most recent photos
-  const { assets } = await MediaLibrary.getAssetsAsync({
+function toMs(t: number): number {
+  // 兼容秒级（iOS旧版）和毫秒级时间戳
+  return t && t < 1e10 ? t * 1000 : t || 0;
+}
+
+function qualityScore(a: MediaLibrary.Asset): number {
+  let s = 0;
+
+  // 新鲜度（max 3pts）
+  const ageDays = (Date.now() - toMs(a.modificationTime)) / 86400000;
+  if (ageDays <= 7) s += 3;
+  else if (ageDays <= 30) s += 2;
+  else if (ageDays <= 90) s += 1;
+
+  // 分辨率（max 3pts）
+  const mp = ((a.width || 0) * (a.height || 0)) / 1e6;
+  if (mp >= 10) s += 3;
+  else if (mp >= 6) s += 2;
+  else if (mp >= 3) s += 1;
+  else if (mp > 0) s += 0.5;
+
+  // 竖构图加分（max 2pts）
+  if (a.width > 0 && a.height > 0) {
+    const p = Math.min(a.width / a.height, a.height / a.width);
+    if (p >= 0.55 && p <= 0.85) s += 2;
+    else if (p >= 0.85 && p <= 1.2) s += 1.5;
+  }
+
+  // 截图惩罚
+  const isShot =
+    (a.width === 1170 && a.height === 2532) ||
+    (a.width === 1179 && a.height === 2556) ||
+    (a.width === 1290 && a.height === 2796) ||
+    (a.width === 1080 && a.height === 1920) ||
+    (a.width === 828 && a.height === 1792);
+  if (isShot) s -= 3;
+
+  return s;
+}
+
+// 人脸评分：-2 ~ +4
+// 大脸 = 宝宝近景；无脸 = 风景/食物
+function faceScore(
+  faces: FaceDetector.FaceFeature[],
+  imgW: number,
+  imgH: number
+): number {
+  if (!faces || faces.length === 0) return -2;
+  const imgArea = (imgW || 1) * (imgH || 1);
+  let maxRatio = 0;
+  for (const f of faces) {
+    const fa = (f.bounds.size.width || 0) * (f.bounds.size.height || 0);
+    const ratio = fa / imgArea;
+    if (ratio > maxRatio) maxRatio = ratio;
+  }
+  if (maxRatio > 0.20) return 4; // 脸占 >20%：大头近景
+  if (maxRatio > 0.10) return 3; // >10%：人像
+  if (maxRatio > 0.04) return 2; // >4%：中景
+  return 1;                       // 有脸但很小
+}
+
+export type ScanResult = {
+  photos: (MediaLibrary.Asset & { _score: number; _fScore: number })[];
+  totalScanned: number;
+  faceDetectionWorked: boolean;
+};
+
+export async function scanPhotos(
+  onProgress?: (p: number) => void
+): Promise<ScanResult> {
+  // Phase 1：加载全部照片，快速质量评分（进度 0→50%）
+  const page = await MediaLibrary.getAssetsAsync({
     mediaType: 'photo',
-    sortBy: 'modificationTime',
+    sortBy: [['modificationTime', false]],
     first: MAX_PHOTOS,
   });
 
-  // Apply union filter: include if within DAY_RANGE OR within top MAX_PHOTOS
-  // Since we fetched MAX_PHOTOS already, just include all of them + any from range
-  const candidates = assets;
-
-  if (candidates.length === 0) {
-    return {
-      babyProfileId,
-      scannedCount: 0,
-      selectedIds: [],
-      rejectedIds: [],
-      allIds: [],
-      uriMap: {},
-    };
+  const assets = page.assets;
+  const total = assets.length;
+  if (total === 0) {
+    return { photos: [], totalScanned: 0, faceDetectionWorked: false };
   }
 
-  // Score each asset
-  const scores = scoreAssets(candidates);
-
-  // Burst deduplication
-  const deduplicated = deduplicateBursts(scores, candidates);
-
-  // Take top MAX_RESULTS
-  const top = deduplicated
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_RESULTS);
-
-  const uriMap: Record<string, string> = {};
-  for (const s of deduplicated) {
-    uriMap[s.assetId] = s.uri;
-  }
-
-  return {
-    babyProfileId,
-    scannedCount: candidates.length,
-    selectedIds: top.map(s => s.assetId),
-    rejectedIds: [],
-    allIds: top.map(s => s.assetId),
-    uriMap,
-  };
-}
-
-function scoreAssets(assets: MediaLibrary.Asset[]): PhotoScore[] {
-  const now = Date.now() / 1000; // unix seconds
-
-  return assets.map(asset => {
-    let score = 0;
-    const reasons: string[] = [];
-
-    // 1. Recency (max 3 pts)
-    const daysAgo = (now - asset.modificationTime) / 86400;
-    if (daysAgo <= 7) { score += 3; reasons.push('本周拍摄'); }
-    else if (daysAgo <= 30) { score += 2; reasons.push('近期拍摄'); }
-    else if (daysAgo <= 90) { score += 1; }
-
-    // 2. Resolution — proxy for sharpness (max 3 pts)
-    const megapixels = (asset.width * asset.height) / 1_000_000;
-    if (megapixels >= 10) { score += 3; reasons.push('超高清'); }
-    else if (megapixels >= 6) { score += 2; reasons.push('高清'); }
-    else if (megapixels >= 3) { score += 1; }
-
-    // 3. Aspect ratio — portrait preferred for baby photos (max 2 pts)
-    if (asset.height > 0) {
-      const ratio = asset.width / asset.height;
-      if (ratio >= 0.55 && ratio <= 0.85) { score += 2; reasons.push('竖版构图'); }
-      else if (ratio >= 0.85 && ratio <= 1.2) { score += 1.5; reasons.push('方形构图'); }
-    }
-
-    // 4. Prefer non-screenshot resolution (common screenshot = 390×844 or 1290×2796)
-    const isLikelyScreenshot =
-      (asset.width === 390 && asset.height === 844) ||
-      (asset.width === 1290 && asset.height === 2796) ||
-      (asset.width === 1170 && asset.height === 2532);
-    if (isLikelyScreenshot) score -= 3;
-
-    if (reasons.length === 0) reasons.push('精选照片');
-
-    return {
-      assetId: asset.id,
-      uri: asset.uri,
-      score,
-      reasons,
-      modificationTime: asset.modificationTime,
-      width: asset.width,
-      height: asset.height,
-    };
+  const quickScored = assets.map((a, i) => {
+    if (onProgress) onProgress(((i + 1) / total) * 0.5);
+    return { ...a, _score: qualityScore(a), _fScore: 0 };
   });
-}
 
-function deduplicateBursts(scores: PhotoScore[], _assets: MediaLibrary.Asset[]): PhotoScore[] {
-  // Sort by modification time
-  const sorted = [...scores].sort((a, b) => a.modificationTime - b.modificationTime);
+  // 取质量 Top60 做人脸检测
+  const candidates = [...quickScored]
+    .sort((a, b) => b._score - a._score)
+    .slice(0, CANDIDATES);
 
-  const groups: PhotoScore[][] = [];
-  let currentGroup: PhotoScore[] = [];
-  let lastTime = -Infinity;
-
-  for (const score of sorted) {
-    if (currentGroup.length === 0 || score.modificationTime - lastTime <= BURST_INTERVAL_SECONDS) {
-      currentGroup.push(score);
-      lastTime = score.modificationTime;
-    } else {
-      groups.push(currentGroup);
-      currentGroup = [score];
-      lastTime = score.modificationTime;
+  // Phase 2：对 Top60 跑人脸检测（进度 50→100%）
+  let faceDetectionWorked = false;
+  for (let i = 0; i < candidates.length; i++) {
+    if (onProgress) onProgress(0.5 + ((i + 1) / candidates.length) * 0.5);
+    const c = candidates[i];
+    try {
+      const info = await MediaLibrary.getAssetInfoAsync(c.id);
+      const uri = info.localUri || info.uri;
+      if (uri) {
+        const result = await FaceDetector.detectFacesAsync(uri, {
+          mode: FaceDetector.FaceDetectorMode.fast,
+          detectLandmarks: FaceDetector.FaceDetectorLandmarks.none,
+          runClassifications: FaceDetector.FaceDetectorClassifications.none,
+        });
+        c._fScore = faceScore(result.faces, c.width, c.height);
+        faceDetectionWorked = true;
+      }
+    } catch {
+      // 单张失败不影响整体
     }
   }
-  if (currentGroup.length > 0) groups.push(currentGroup);
 
-  // Keep top MAX_PER_BURST per group by score
-  const result: PhotoScore[] = [];
-  for (const group of groups) {
-    const topInGroup = [...group]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, MAX_PER_BURST);
-    result.push(...topInGroup);
-  }
+  // 最终得分：质量 60% + 人脸 40%（仅当人脸检测成功时）
+  const finalScored = candidates.map(c => ({
+    ...c,
+    _score: faceDetectionWorked
+      ? c._score * 0.6 + c._fScore * (6.5 / 4) * 0.4
+      : c._score,
+  }));
 
-  return result;
+  const photos = finalScored
+    .sort((a, b) => b._score - a._score)
+    .slice(0, TOP_N) as (MediaLibrary.Asset & { _score: number; _fScore: number })[];
+
+  return { photos, totalScanned: total, faceDetectionWorked };
 }

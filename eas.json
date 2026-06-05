@@ -1,0 +1,22 @@
+{
+  "cli": {
+    "version": ">= 20.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": false,
+        "resourceClass": "m-medium"
+      },
+      "env": {}
+    },
+    "simulator": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    }
+  }
+}
