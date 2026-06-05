@@ -1,4 +1,4 @@
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import * as FaceDetector from 'expo-face-detector';
 
 const MAX_PHOTOS = 1000;
@@ -130,7 +130,7 @@ export async function scanPhotos(
 
   const photos = finalScored
     .sort((a, b) => b._score - a._score)
-    .slice(0, TOP_N) as (MediaLibrary.Asset & { _score: number; _fScore: number })[];
+    .slice(0, TOP_N) as unknown as (MediaLibrary.Asset & { _score: number; _fScore: number })[];
 
   return { photos, totalScanned: total, faceDetectionWorked };
 }

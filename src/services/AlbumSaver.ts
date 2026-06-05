@@ -1,4 +1,4 @@
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { ALBUM_NAME } from '../constants';
 
 export interface SaveResult {
@@ -16,11 +16,11 @@ export async function saveAssetsToAlbum(assetIds: string[]): Promise<SaveResult>
     }
 
     // Fetch asset objects for the selected IDs
-    const assetObjects: MediaLibrary.Asset[] = [];
+    const assetObjects: MediaLibrary.AssetRef[] = [];
     for (const id of assetIds) {
       try {
         const info = await MediaLibrary.getAssetInfoAsync(id);
-        if (info) assetObjects.push(info);
+        if (info) assetObjects.push(info as MediaLibrary.Asset);
       } catch {
         // skip individual failures
       }

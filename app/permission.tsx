@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Linking } from 'react-native';
 import { router } from 'expo-router';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 import { PrimaryButton } from '@/components/PrimaryButton';
 
 const COMMITMENTS = [
@@ -18,7 +18,7 @@ export default function PermissionScreen() {
     const { status } = await MediaLibrary.requestPermissionsAsync();
     setIsRequesting(false);
 
-    if (status === 'granted' || status === 'limited') {
+    if (status === 'granted' || (status as string) === 'limited') {
       router.push('/baby-profile');
     } else {
       Alert.alert(

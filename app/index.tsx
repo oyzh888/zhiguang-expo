@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { loadProfiles } from '@/stores/babyProfileStore';
 import { getScanResult } from '@/stores/scanResultStore';
-import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibrary from 'expo-media-library/legacy';
 
 const BULLETS: { icon: string; text: string }[] = [
   { icon: '📷', text: '自动扫描最近相册，无需手动挑选' },
@@ -17,8 +17,8 @@ export default function OnboardingScreen() {
   useEffect(() => {
     // Returning user fast-path
     (async () => {
-      const { status } = await MediaLibrary.getPermissionsAsync();
-      const canProceed = status === 'granted' || status === 'limited';
+      const perm = await MediaLibrary.getPermissionsAsync();
+      const canProceed = perm.status === 'granted' || perm.accessPrivileges === 'limited';
       const profiles = await loadProfiles();
       const result = getScanResult();
       if (canProceed && profiles.length > 0 && result) {

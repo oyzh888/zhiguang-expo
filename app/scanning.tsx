@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import { router, useLocalSearchParams } from 'expo-router';
 import { scanPhotos } from '@/services/PhotoScanner';
 import { setScanResult } from '@/stores/scanResultStore';
+import { ScanResult } from '@/types';
 
 type Phase = 'scanning' | 'noBaby' | 'empty' | 'done' | 'error';
 
@@ -21,28 +22,46 @@ export default function ScanningScreen() {
     setPhase('scanning');
     setStage('读取照片…');
 
-    // Animate progress
     const animate = (to: number, duration: number) =>
       Animated.timing(progressAnim, { toValue: to, duration, useNativeDriver: false }).start();
 
     animate(0.15, 500);
-    await new Promise(r => setTimeout(r, 600));
-    setStage('分析照片质量…');
-    animate(0.5, 1500);
 
     try {
-      const result = await scanPhotos(babyId ?? '');
-      setCount(result.scannedCount);
-      animate(0.9, 500);
+      const result = await scanPhotos((progress) => {
+        if (progress < 0.5) {
+          setStage('分析照片质量…');
+        } else {
+          setStage('人脸识别中…');
+        }
+        animate(progress * 0.9, 300);
+      });
+
+      setCount(result.totalScanned);
+      animate(0.95, 500);
       setStage('生成精选结果…');
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 600));
       animate(1.0, 300);
 
-      setScanResult(result);
+      // Convert PhotoScanner.ScanResult → src/types.ScanResult
+      const selectedIds = result.photos.map(p => p.id);
+      const uriMap: Record<string, string> = {};
+      for (const p of result.photos) {
+        uriMap[p.id] = p.uri;
+      }
+      const scanResult: ScanResult = {
+        babyProfileId: babyId ?? '',
+        scannedCount: result.totalScanned,
+        selectedIds,
+        rejectedIds: [],
+        allIds: selectedIds,
+        uriMap,
+      };
+      setScanResult(scanResult);
 
-      if (result.scannedCount === 0) {
+      if (result.totalScanned === 0) {
         setPhase('empty');
-      } else if (result.selectedIds.length === 0) {
+      } else if (selectedIds.length === 0) {
         setPhase('noBaby');
       } else {
         setPhase('done');

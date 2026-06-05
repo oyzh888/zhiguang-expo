@@ -131,7 +131,7 @@ const styles = StyleSheet.create({
   card: { width: SIZE, height: SIZE, margin: GAP / 2, borderRadius: 8, overflow: 'hidden', position: 'relative' },
   cardRejected: { opacity: 0.3 },
   cardImage: { width: SIZE, height: SIZE },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000', opacity: 0.4 },
+  overlay: { ...StyleSheet.absoluteFill, backgroundColor: '#000', opacity: 0.4 },
   actionBtn: {
     position: 'absolute', top: 4, right: 4,
     backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12,
