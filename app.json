@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "稚光",
+    "slug": "zhiguang",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "zhiguang",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0d0d1a",
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "稚光需要访问您的相册，在本地识别并筛选宝宝照片。所有处理在设备上完成，照片不会上传。"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0d0d1a"
+      },
+      "permissions": ["READ_MEDIA_IMAGES", "READ_MEDIA_VIDEO"]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-media-library"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

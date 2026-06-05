@@ -1,0 +1,10 @@
+export const ALBUM_NAME = '稚光精选';
+export const PURPLE = '#6C63FF';
+export const PURPLE_LIGHT = '#A78BFA';
+export const BG = '#0d0d1a';
+export const CARD_BG = '#1a1a2e';
+export const MAX_PHOTOS = 1000;
+export const DAY_RANGE = 90;
+export const MAX_RESULTS = 20;
+export const BURST_INTERVAL_SECONDS = 2;
+export const MAX_PER_BURST = 2;
